@@ -1,12 +1,10 @@
 import { Router } from 'express'
-import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { Job } from '../models/Job.js'
 import { Resume } from '../models/Resume.js'
 import { TailoredResume } from '../models/TailoredResume.js'
-import { env } from '../config/env.js'
 import { asyncHandler } from '../middleware/async-handler.js'
-import { analyzeJob, analyzeResume, resumeHash } from '../services/ai-analysis.js'
+import { analyzeJobWithRules, resumeHash } from '../services/rule-analysis.js'
 
 export const jobsRouter = Router()
 
@@ -17,8 +15,6 @@ const jobInputSchema = z.object({
   additionalInfo: z.string().trim().max(5000).optional(),
   jobDescription: z.string().trim().min(1).max(30000),
 })
-
-const analysisLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Analysis limit reached. Please try again later.' } })
 
 jobsRouter.get('/', asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1)
@@ -45,11 +41,7 @@ jobsRouter.get('/:jobId', asyncHandler(async (req, res) => {
   res.json({ job })
 }))
 
-jobsRouter.post('/:jobId/analyze', analysisLimiter, asyncHandler(async (req, res) => {
-  if (env.aiProvider === 'gemini' && (!env.geminiApiKey || env.geminiApiKey.startsWith('replace-'))) {
-    res.status(503).json({ error: 'Add GEMINI_API_KEY to the server .env file to enable AI analysis, then restart the API.' })
-    return
-  }
+jobsRouter.post('/:jobId/analyze', asyncHandler(async (req, res) => {
   const force = z.object({ force: z.boolean().optional() }).parse(req.body).force === true
   const [job, resume] = await Promise.all([
     Job.findById(req.params.jobId),
@@ -64,37 +56,19 @@ jobsRouter.post('/:jobId/analyze', analysisLimiter, asyncHandler(async (req, res
     return
   }
   const currentHash = resumeHash(resume.content)
-  if (!force && job.analysis?.resumeContentHash === currentHash) {
+  if (!force && job.analysis?.method === 'rules-v1' && job.analysis.resumeContentHash === currentHash) {
     res.json({ job, cached: true })
     return
   }
-  try {
-    let profile = resume.analysis as { contentHash?: string; overview: string; skills: Array<{ name: string; evidence: string }>; sections: Array<{ name: string; summary: string }> } | null
-    if (!profile || profile.contentHash !== currentHash) {
-      profile = await analyzeResume(resume.content)
-      resume.analysis = profile
-      await resume.save()
-    }
-    job.analysis = await analyzeJob({
-      resume: resume.content,
-      profile,
-      jobDescription: job.jobDescription,
-      companyDescription: job.companyDescription,
-      additionalInfo: job.additionalInfo,
-      jobTitle: job.jobTitle,
-    })
-    await job.save()
-    res.json({ job, cached: false })
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : 'unknown error'
-    console.error(`${env.aiProvider} analysis failed`, detail)
-    if (detail === 'OLLAMA_UNAVAILABLE' || detail.startsWith('OLLAMA_REQUEST_FAILED_')) {
-      res.status(503).json({ error: `Ollama is unavailable or the model is missing. Start Ollama and run "ollama pull ${env.ollamaModel}", then retry.` })
-      return
-    }
-    const provider = env.aiProvider === 'ollama' ? 'Ollama could not complete the analysis.' : 'Gemini could not complete this analysis. Check your API key and available quota.'
-    res.status(502).json({ error: provider })
-  }
+  job.analysis = analyzeJobWithRules({
+    resume: resume.content,
+    jobDescription: job.jobDescription,
+    companyDescription: job.companyDescription,
+    additionalInfo: job.additionalInfo,
+    jobTitle: job.jobTitle,
+  })
+  await job.save()
+  res.json({ job, cached: false })
 }))
 
 jobsRouter.delete('/:jobId', asyncHandler(async (req, res) => {

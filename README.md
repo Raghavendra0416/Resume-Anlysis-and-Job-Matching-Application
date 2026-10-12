@@ -4,7 +4,7 @@ Single-user resume analysis and job matching MVP built with React, TypeScript, E
 
 ## Current stage
 
-The MVP supports a protected single-user workspace, a saved main resume, saved job comparisons, local Ollama analysis by default, explainable requirement coverage, and job-search skill insights. Gemini is an optional hosted provider.
+The MVP supports a protected single-user workspace, a saved main resume, saved job comparisons, deterministic requirement coverage, and tailored resume drafts. It uses no AI services.
 
 ## Project structure
 
@@ -17,14 +17,7 @@ server/  Express, TypeScript, Mongoose, auth, REST routes
 
 1. Install Node.js and run MongoDB locally, or create a MongoDB Atlas database.
 2. Copy `.env.example` to `.env` and set a private `APP_PASSWORD`, a random `SESSION_SECRET` with at least 32 characters, and `MONGODB_URI`.
-3. Install Ollama, start it on the same machine as the API, and download the configured model:
-
-```sh
-ollama pull qwen3:4b
-```
-
-The default model uses Ollama at `http://127.0.0.1:11434`. Set `AI_PROVIDER=gemini` only if you choose to send resume data to Google's API; then configure `GEMINI_API_KEY` and `GEMINI_MODEL`.
-4. Install packages and run the frontend and API in separate terminals:
+3. Install packages and run the frontend and API in separate terminals:
 
 ```sh
 npm install
@@ -34,9 +27,7 @@ npm run dev:server
 
 The API listens on port 4000 by default. Set `CLIENT_ORIGINS` to the exact frontend origin (comma-separated if needed). The browser login uses an HTTP-only cookie; production cookies require HTTPS.
 
-By default, resume and job data are sent only to the local Ollama service running on the same machine as the API. This prevents sending analysis prompts to an AI provider, but resume/job records are still stored in the configured MongoDB database. Do not expose the Ollama port publicly. A deployed backend cannot reach Ollama on your laptop at `127.0.0.1`; production needs a private model host reachable by the backend or a different provider.
-
-Optional Gemini mode: create a Gemini API key in Google AI Studio, configure billing if choosing its paid tier, and put the key in the server's root `.env` as `GEMINI_API_KEY`. Never place it in a `VITE_` variable. The free API tier may use submitted prompts to improve Google products; the paid tier says prompts are not used for product improvement. API usage is billed separately from Google AI Pro.
+Resume and job text are sent to the configured application server and stored in MongoDB. The application does not send this text to an AI service. Comparison checks a fixed skills, experience, and education vocabulary, scans the full resume for evidence, and shows matching excerpts where available. A term absent from the vocabulary may not be detected.
 
 ## API
 
@@ -50,14 +41,14 @@ All routes are prefixed by `/api`. `GET /api/health` is public; data routes requ
 | `GET`, `PUT`, `DELETE` | `/api/resume` | Read, save, or delete the main resume |
 | `GET`, `POST` | `/api/jobs` | List saved job descriptions or add one |
 | `GET`, `DELETE` | `/api/jobs/:jobId` | Read or delete a saved job |
-| `POST` | `/api/jobs/:jobId/analyze` | Analyze a saved job against the main resume; `{ "force": true }` reruns it |
+| `POST` | `/api/jobs/:jobId/analyze` | Compare a saved job with the main resume; `{ "force": true }` reruns the rules |
 | `GET` | `/api/tailored-resumes` | List saved tailored resumes |
 | `POST` | `/api/tailored-resumes/jobs/:jobId` | Save a tailored resume for a job |
 | `PATCH`, `DELETE` | `/api/tailored-resumes/:resumeId` | Edit or delete a saved tailored resume |
 
 Resume text and tailored resume text are stored without trimming their whitespace so line breaks are preserved. Updating the main resume clears its cached analysis. Deleting a job also deletes its tailored resumes.
 
-The analysis caches a factual resume profile until the main resume changes. Requirement coverage is deterministic: required criteria weigh 5, preferred 2, and inferred 1; evidenced criteria receive full credit, partial evidence half credit, and other statuses no credit. It is not a hiring probability. Resume citations are checked against the source text, but users should still verify every AI suggestion. Never add missing skills or experience unless they are true.
+The score uses weighted requirement coverage: required criteria weigh 5, preferred 2, and unclassified mentions 1; explicit resume evidence earns full credit, related evidence half credit, and missing or unconfirmed criteria no credit. The result is not a hiring probability. Historical AI analyses are retained in MongoDB, labeled as historical in the app, and excluded from new rule-based job insights.
 
 ## Deployment notes
 

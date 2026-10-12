@@ -1,6 +1,7 @@
 import { Schema, model } from 'mongoose'
 
 export interface JobAnalysis {
+  method: 'rules-v1'
   score: number
   scoreMethod: string
   summary: string
@@ -23,7 +24,6 @@ export interface JobAnalysis {
   }>
   analyzedAt: string
   resumeContentHash: string
-  model: string
 }
 
 export interface JobDocument {
@@ -52,6 +52,7 @@ const requirementSchema = new Schema(
 
 const analysisSchema = new Schema(
   {
+    method: { type: String, enum: ['rules-v1'], required: true },
     score: { type: Number, min: 0, max: 100, required: true },
     scoreMethod: { type: String, required: true },
     summary: { type: String, required: true, maxlength: 3000 },
@@ -60,7 +61,6 @@ const analysisSchema = new Schema(
     recommendedEdits: { type: [{ section: String, priority: String, recommendation: String, sourceRequirement: String, resumeEvidence: [String] }], default: [] },
     analyzedAt: { type: String, required: true },
     resumeContentHash: { type: String, required: true },
-    model: { type: String, required: true },
   },
   { _id: false },
 )

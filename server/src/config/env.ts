@@ -14,11 +14,6 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must contain at least 32 characters'),
   CLIENT_ORIGINS: z.string().default('http://localhost:5173'),
   COOKIE_NAME: z.string().default('resume_session'),
-  AI_PROVIDER: z.enum(['ollama', 'gemini']).default('ollama'),
-  OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434'),
-  OLLAMA_MODEL: z.string().default('qwen3:4b'),
-  GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
 })
 
 const result = envSchema.safeParse(process.env)
@@ -31,9 +26,4 @@ export const env = {
   ...result.data,
   clientOrigins: result.data.CLIENT_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
   isProduction: result.data.NODE_ENV === 'production',
-  aiProvider: result.data.AI_PROVIDER,
-  ollamaBaseUrl: result.data.OLLAMA_BASE_URL.replace(/\/$/, ''),
-  ollamaModel: result.data.OLLAMA_MODEL,
-  geminiApiKey: result.data.GEMINI_API_KEY,
-  geminiModel: result.data.GEMINI_MODEL,
 }

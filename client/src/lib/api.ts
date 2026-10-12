@@ -46,7 +46,6 @@ export const api = {
 export interface ResumeRecord {
   _id: string
   content: string
-  analysis: Record<string, unknown> | null
   updatedAt: string
 }
 
@@ -63,6 +62,7 @@ export interface JobRecord {
 }
 
 export interface JobAnalysis {
+  method: 'rules-v1'
   score: number
   scoreMethod: string
   summary: string
@@ -84,7 +84,6 @@ export interface JobAnalysis {
     resumeEvidence: string[]
   }>
   analyzedAt: string
-  model: string
 }
 
 export interface TailoredResumeRecord {
