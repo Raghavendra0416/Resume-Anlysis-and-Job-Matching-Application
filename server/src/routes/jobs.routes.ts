@@ -6,7 +6,7 @@ import { Resume } from '../models/Resume.js'
 import { TailoredResume } from '../models/TailoredResume.js'
 import { env } from '../config/env.js'
 import { asyncHandler } from '../middleware/async-handler.js'
-import { analyzeJob, analyzeResume, resumeHash } from '../services/gemini-analysis.js'
+import { analyzeJob, analyzeResume, resumeHash } from '../services/ai-analysis.js'
 
 export const jobsRouter = Router()
 
@@ -46,7 +46,7 @@ jobsRouter.get('/:jobId', asyncHandler(async (req, res) => {
 }))
 
 jobsRouter.post('/:jobId/analyze', analysisLimiter, asyncHandler(async (req, res) => {
-  if (!env.geminiApiKey || env.geminiApiKey.startsWith('replace-')) {
+  if (env.aiProvider === 'gemini' && (!env.geminiApiKey || env.geminiApiKey.startsWith('replace-'))) {
     res.status(503).json({ error: 'Add GEMINI_API_KEY to the server .env file to enable AI analysis, then restart the API.' })
     return
   }
@@ -86,8 +86,14 @@ jobsRouter.post('/:jobId/analyze', analysisLimiter, asyncHandler(async (req, res
     await job.save()
     res.json({ job, cached: false })
   } catch (error) {
-    console.error('Gemini analysis failed', error instanceof Error ? error.message : 'unknown error')
-    res.status(502).json({ error: 'Gemini could not complete this analysis. Check your API key and available quota, then try again.' })
+    const detail = error instanceof Error ? error.message : 'unknown error'
+    console.error(`${env.aiProvider} analysis failed`, detail)
+    if (detail === 'OLLAMA_UNAVAILABLE' || detail.startsWith('OLLAMA_REQUEST_FAILED_')) {
+      res.status(503).json({ error: `Ollama is unavailable or the model is missing. Start Ollama and run "ollama pull ${env.ollamaModel}", then retry.` })
+      return
+    }
+    const provider = env.aiProvider === 'ollama' ? 'Ollama could not complete the analysis.' : 'Gemini could not complete this analysis. Check your API key and available quota.'
+    res.status(502).json({ error: provider })
   }
 }))
 

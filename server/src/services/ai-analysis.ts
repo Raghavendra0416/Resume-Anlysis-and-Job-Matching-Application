@@ -70,15 +70,50 @@ function evidenceMatches(text: string, evidence: string) {
 }
 
 async function generateJson<T>(prompt: string, responseSchema: object, validator: z.ZodType<T>): Promise<T> {
-  if (!env.geminiApiKey) throw new Error('GEMINI_API_KEY_MISSING')
-  const ai = new GoogleGenAI({ apiKey: env.geminiApiKey })
-  const response = await ai.models.generateContent({
-    model: env.geminiModel,
-    contents: prompt,
-    config: { responseMimeType: 'application/json', responseSchema },
-  })
-  if (!response.text) throw new Error('Gemini returned an empty response.')
-  return validator.parse(JSON.parse(response.text))
+  let output: string | undefined
+  if (env.aiProvider === 'ollama') {
+    let response: Response
+    try {
+      response = await fetch(`${env.ollamaBaseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: env.ollamaModel,
+          messages: [{ role: 'user', content: prompt }],
+          format: toJsonSchema(responseSchema),
+          stream: false,
+          keep_alive: '10m',
+          options: { temperature: 0 },
+        }),
+        signal: AbortSignal.timeout(240_000),
+      })
+    } catch {
+      throw new Error('OLLAMA_UNAVAILABLE')
+    }
+    if (!response.ok) throw new Error(`OLLAMA_REQUEST_FAILED_${response.status}`)
+    const payload = await response.json() as { message?: { content?: string } }
+    output = payload.message?.content
+  } else {
+    if (!env.geminiApiKey || env.geminiApiKey.startsWith('replace-')) throw new Error('GEMINI_API_KEY_MISSING')
+    const ai = new GoogleGenAI({ apiKey: env.geminiApiKey })
+    const response = await ai.models.generateContent({
+      model: env.geminiModel,
+      contents: prompt,
+      config: { responseMimeType: 'application/json', responseSchema },
+    })
+    output = response.text
+  }
+  if (!output) throw new Error('AI_EMPTY_RESPONSE')
+  return validator.parse(JSON.parse(output))
+}
+
+function toJsonSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(toJsonSchema)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [
+    key,
+    key === 'type' && typeof child === 'string' ? child.toLowerCase() : toJsonSchema(child),
+  ]))
 }
 
 export async function analyzeResume(content: string) {
@@ -92,7 +127,7 @@ export async function analyzeResume(content: string) {
     skills: profile.skills.filter((skill) => evidenceMatches(content, skill.evidence)),
     contentHash: resumeHash(content),
     analyzedAt: new Date().toISOString(),
-    model: env.geminiModel,
+    model: env.aiProvider === 'ollama' ? `Ollama · ${env.ollamaModel}` : `Gemini · ${env.geminiModel}`,
   }
 }
 
@@ -129,6 +164,6 @@ export async function analyzeJob(input: { resume: string; profile: { overview: s
     scoreMethod: 'Weighted coverage of extracted job requirements: required 5 points, preferred 2, inferred 1; evidenced earns full credit, partial earns half. This is not a hiring probability.',
     analyzedAt: new Date().toISOString(),
     resumeContentHash: resumeHash(input.resume),
-    model: env.geminiModel,
+    model: env.aiProvider === 'ollama' ? `Ollama · ${env.ollamaModel}` : `Gemini · ${env.geminiModel}`,
   }
 }

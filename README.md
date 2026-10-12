@@ -4,7 +4,7 @@ Single-user resume analysis and job matching MVP built with React, TypeScript, E
 
 ## Current stage
 
-The MVP supports a protected single-user workspace, a saved main resume, saved job comparisons, Gemini-assisted analysis, explainable requirement coverage, and job-search skill insights.
+The MVP supports a protected single-user workspace, a saved main resume, saved job comparisons, local Ollama analysis by default, explainable requirement coverage, and job-search skill insights. Gemini is an optional hosted provider.
 
 ## Project structure
 
@@ -16,8 +16,15 @@ server/  Express, TypeScript, Mongoose, auth, REST routes
 ## Local setup
 
 1. Install Node.js and run MongoDB locally, or create a MongoDB Atlas database.
-2. Copy `.env.example` to `.env` and set a private `APP_PASSWORD`, a random `SESSION_SECRET` with at least 32 characters, `MONGODB_URI`, and `GEMINI_API_KEY`.
-3. Install packages and run the frontend and API in separate terminals:
+2. Copy `.env.example` to `.env` and set a private `APP_PASSWORD`, a random `SESSION_SECRET` with at least 32 characters, and `MONGODB_URI`.
+3. Install Ollama, start it on the same machine as the API, and download the configured model:
+
+```sh
+ollama pull qwen3:4b
+```
+
+The default model uses Ollama at `http://127.0.0.1:11434`. Set `AI_PROVIDER=gemini` only if you choose to send resume data to Google's API; then configure `GEMINI_API_KEY` and `GEMINI_MODEL`.
+4. Install packages and run the frontend and API in separate terminals:
 
 ```sh
 npm install
@@ -27,7 +34,9 @@ npm run dev:server
 
 The API listens on port 4000 by default. Set `CLIENT_ORIGINS` to the exact frontend origin (comma-separated if needed). The browser login uses an HTTP-only cookie; production cookies require HTTPS.
 
-Create a Gemini API key in Google AI Studio and put it in the server's root `.env` as `GEMINI_API_KEY`. Do not add the key to a `VITE_` variable or share it in chat. `GEMINI_MODEL` defaults to `gemini-3.8-flash`. This project uses the Gemini free tier: Google may use submitted prompts and responses to improve its products. Resume and job data are sent to Gemini when you analyze a job. Google's terms say not to submit sensitive, confidential, or personal information to the Gemini free tier. Remove personal information from the saved resume before analysis; the UI requires confirmation, but cannot verify the content itself.
+By default, resume and job data are sent only to the local Ollama service running on the same machine as the API. This prevents sending analysis prompts to an AI provider, but resume/job records are still stored in the configured MongoDB database. Do not expose the Ollama port publicly. A deployed backend cannot reach Ollama on your laptop at `127.0.0.1`; production needs a private model host reachable by the backend or a different provider.
+
+Optional Gemini mode: create a Gemini API key in Google AI Studio, configure billing if choosing its paid tier, and put the key in the server's root `.env` as `GEMINI_API_KEY`. Never place it in a `VITE_` variable. The free API tier may use submitted prompts to improve Google products; the paid tier says prompts are not used for product improvement. API usage is billed separately from Google AI Pro.
 
 ## API
 
