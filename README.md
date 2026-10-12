@@ -47,4 +47,4 @@ Resume text and tailored resume text are stored without trimming their whitespac
 
 ## Deployment notes
 
-The API can run as a Node service (for example on Render) and the client can be built as a static Vite site (for example on Vercel). Configure the server environment variables in the hosting dashboard; never put `APP_PASSWORD`, `SESSION_SECRET`, or the database URI in frontend variables. Set `CLIENT_ORIGINS` to the deployed frontend origin. Configure the frontend API base URL during the integration stage.
+The API can run as a Node service (for example on Render) and the client can be built as a static Vite site (for example on Vercel). Configure the server environment variables in the hosting dashboard; never put `APP_PASSWORD`, `SESSION_SECRET`, or the database URI in frontend variables. Set `CLIENT_ORIGINS` to the deployed frontend origin and set `VITE_API_BASE_URL` to the API's public `/api` URL when building the frontend.
