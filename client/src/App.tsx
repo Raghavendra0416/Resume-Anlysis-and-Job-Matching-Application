@@ -24,6 +24,7 @@ const navItems = [
   { label: 'Overview', to: '/', icon: LayoutDashboard },
   { label: 'My resume', to: '/resume', icon: FileText },
   { label: 'Compare a job', to: '/compare', icon: Target },
+  { label: 'Tailored copies', to: '/tailored', icon: FileText },
   { label: 'Job insights', to: '/insights', icon: TrendingUp },
 ]
 
@@ -235,6 +236,10 @@ function JobAnalysisPage() {
   const [job, setJob] = useState<JobRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([])
+  const [customSkill, setCustomSkill] = useState('')
+  const [creatingCopy, setCreatingCopy] = useState(false)
+  const [tailoredResume, setTailoredResume] = useState<Awaited<ReturnType<typeof api.createTailoredResume>>['resume'] | null>(null)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
@@ -266,14 +271,41 @@ function JobAnalysisPage() {
 
   const analysis: JobAnalysis | null = job?.analysis ?? null
   const requiredGaps = analysis?.requirements.filter((requirement) => requirement.importance === 'required' && requirement.status !== 'evidenced') ?? []
+  const selectableSkills = analysis?.requirements.filter((requirement) => requirement.category === 'skill' && requirement.status !== 'evidenced') ?? []
   const statusLabel = { evidenced: 'In resume', partial: 'Partly supported', missing: 'Missing', confirm: 'Needs your review' }
+
+  async function createTailoredCopy() {
+    if (!selectedSkills.length || !job) return
+    const skillList = selectedSkills.join(', ')
+    if (!window.confirm(`Create a separate tailored resume for ${job.companyName} with these selected skills in its Skills section?\n\n${skillList}\n\nOnly proceed if each skill is accurate for you. Your main resume will not be changed.`)) return
+    setCreatingCopy(true)
+    setError('')
+    try {
+      const result = await api.createTailoredResume(job._id, selectedSkills)
+      setTailoredResume(result.resume)
+      setSelectedSkills([])
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not create the tailored resume.')
+    } finally {
+      setCreatingCopy(false)
+    }
+  }
+
+  function addCustomSkill() {
+    const skill = customSkill.trim()
+    if (!skill || selectedSkills.some((item) => item.toLocaleLowerCase() === skill.toLocaleLowerCase())) return
+    setSelectedSkills((current) => [...current, skill])
+    setCustomSkill('')
+  }
   return <><Header title={job ? `${job.companyName} comparison` : 'Job comparison'} subtitle={job?.jobTitle || 'Resume and job description analysis'} />{loading ? <LoadingMessage label="Loading your comparison…" /> : error && !job ? <ErrorNotice message={error} onRetry={() => void load()} /> : job && <>
     {error && <ErrorNotice message={error} />}
     {!analysis ? <section className="panel analysis-empty"><div className="intro-icon"><FileText size={20} /></div><h2>Compare your resume with this job</h2><p>See which listed skills and qualifications appear in your resume, with the matching text and gaps to review.</p><button className="button button-primary" onClick={() => void analyze()} disabled={analyzing}>{analyzing ? 'Comparing…' : 'Run rule-based comparison'} <ArrowRight size={15} /></button></section> : <>
       <section className="analysis-hero"><div><span className="analysis-kicker">WEIGHTED REQUIREMENT COVERAGE</span><div className="analysis-score">{analysis.score}<span>%</span></div><p>{analysis.summary}</p><small>{analysis.scoreMethod}</small></div><div className="analysis-hero-actions"><button className="button button-secondary" onClick={() => void analyze(true)} disabled={analyzing}>{analyzing ? 'Comparing…' : 'Re-run rules'}</button><NavLink to="/resume" className="text-link">Update main resume <ArrowRight size={14} /></NavLink></div></section>
       <section className="panel analysis-section"><div className="panel-heading"><div><h2>Required items the job calls out</h2><p>These were marked required from the job wording. Address a gap only if it accurately reflects your experience; this list cannot predict hiring decisions.</p></div></div>{requiredGaps.length ? <div className="requirement-list">{requiredGaps.map((requirement) => <article className="requirement-card" key={requirement.name}><div className="requirement-heading"><div><strong>{requirement.name}</strong><span className="requirement-meta">{requirement.category}</span></div><span className={`requirement-status ${requirement.status}`}>{statusLabel[requirement.status]}</span></div><p>{requirement.recommendation}</p></article>)}</div> : <p className="empty-inline">No missing items marked required were detected in the job text. Check preferred and inferred criteria below too.</p>}</section>
       {analysis.strengths.length > 0 && <section className="panel analysis-section"><div className="panel-heading"><div><h2>Where you align</h2><p>Strengths supported by your resume.</p></div></div><ul className="strength-list">{analysis.strengths.map((strength, index) => <li key={`${strength}-${index}`}><Check size={15} />{strength}</li>)}</ul></section>}
-      <section className="panel analysis-section"><div className="panel-heading"><div><h2>Job requirements</h2><p>Review each requirement and the evidence the comparison found.</p></div></div><div className="requirement-list">{analysis.requirements.map((requirement, index) => <article className="requirement-card" key={`${requirement.name}-${index}`}><div className="requirement-heading"><div><strong>{requirement.name}</strong><span className="requirement-meta">{requirement.category} · {requirement.importance}</span></div><span className={`requirement-status ${requirement.status}`}>{statusLabel[requirement.status]}</span></div>{requirement.resumeEvidence.length > 0 && <div className="evidence"><b>Resume evidence</b>{requirement.resumeEvidence.map((quote, i) => <blockquote key={i}>“{quote}”</blockquote>)}</div>}{requirement.jobEvidence.length > 0 && <div className="evidence"><b>Job description</b>{requirement.jobEvidence.map((quote, i) => <blockquote key={i}>“{quote}”</blockquote>)}</div>}<p>{requirement.recommendation}</p></article>)}</div></section>
+      <section className="panel analysis-section"><div className="panel-heading"><div><h2>All detected job requirements</h2><p>Detected requirements from the job text, marked by importance and checked against the full resume.</p></div></div><div className="requirement-list">{analysis.requirements.map((requirement, index) => <article className="requirement-card" key={`${requirement.name}-${index}`}><div className="requirement-heading"><div><strong>{requirement.name}</strong><span className="requirement-meta">{requirement.category} · {requirement.importance}</span></div><span className={`requirement-status ${requirement.status}`}>{statusLabel[requirement.status]}</span></div>{requirement.resumeEvidence.length > 0 && <div className="evidence"><b>Resume evidence</b>{requirement.resumeEvidence.map((quote, i) => <blockquote key={i}>“{quote}”</blockquote>)}</div>}{requirement.jobEvidence.length > 0 && <div className="evidence"><b>Job description</b>{requirement.jobEvidence.map((quote, i) => <blockquote key={i}>“{quote}”</blockquote>)}</div>}<p>{requirement.recommendation}</p></article>)}</div><p className="detector-note">Requirements are detected by a fixed skill and qualification catalog. It may not recognize every skill or phrase in a posting, so compare this list with the original job description too.</p></section>
+      <section className="panel analysis-section"><div className="panel-heading"><div><h2>Select missing skills for a tailored copy</h2><p>Select only skills you genuinely have. The generated copy adds them to its Skills section; it will not invent experience, education, or examples.</p></div></div>{selectableSkills.length ? <div className="skill-select-list">{selectableSkills.map((requirement) => <label className="skill-select-row" key={requirement.name}><input type="checkbox" checked={selectedSkills.includes(requirement.name)} onChange={(event) => setSelectedSkills((current) => event.target.checked ? [...current, requirement.name] : current.filter((name) => name !== requirement.name))} /><span><strong>{requirement.name}</strong><small>{requirement.importance} · {statusLabel[requirement.status]}</small></span></label>)}</div> : <p className="empty-inline">No detected missing skill requirements are available to add. You can add a skill below if the rules did not detect it.</p>}<div className="custom-skill-row"><label className="field-label" htmlFor="custom-skill">Add a missed skill from the job description</label><div><input id="custom-skill" className="text-input" maxLength={100} value={customSkill} onChange={(event) => setCustomSkill(event.target.value)} placeholder="Type a skill exactly as it appears in the job post" /><button className="button button-secondary" type="button" onClick={addCustomSkill} disabled={!customSkill.trim()}>Add skill</button></div><span className="field-hint">The server checks that this term appears in the job details and is absent from your main resume.</span></div>{selectedSkills.some((skill) => !selectableSkills.some((item) => item.name === skill)) && <div className="selected-custom-list"><strong>Added by you</strong>{selectedSkills.filter((skill) => !selectableSkills.some((item) => item.name === skill)).map((skill) => <span key={skill}>{skill}<button type="button" aria-label={`Remove ${skill}`} onClick={() => setSelectedSkills((current) => current.filter((item) => item !== skill))}>×</button></span>)}</div>}<div className="tailor-actions"><span className="field-hint">This creates a saved copy for {job.companyName}. Your main resume stays unchanged.</span><button className="button button-primary" onClick={() => void createTailoredCopy()} disabled={!selectedSkills.length || creatingCopy}>{creatingCopy ? 'Creating copy…' : `Review and create copy${selectedSkills.length ? ` (${selectedSkills.length})` : ''}`}</button></div></section>
+      {tailoredResume && <section className="panel analysis-section tailored-result"><div className="panel-heading"><div><h2>Tailored copy created for {tailoredResume.companyName}</h2><p>Saved as a separate resume. The main resume was not modified.</p></div></div><h3>Where changes were made</h3><ul className="change-location-list">{(tailoredResume.changes ?? []).map((change, index) => <li key={`${change.skill}-${index}`}><strong>{change.skill}</strong><span>Added to {change.section}. {change.location}</span></li>)}</ul><label className="field-label" htmlFor="tailored-content">New resume text</label><textarea id="tailored-content" className="text-area resume-area" value={tailoredResume.content} readOnly /></section>}
       <section className="panel analysis-section"><div className="panel-heading"><div><h2>Resume changes to consider</h2><p>Suggestions may reflect skills that are absent today. Add a qualification only if you can honestly support it.</p></div></div>{analysis.recommendedEdits.length ? <div className="edit-list">{analysis.recommendedEdits.map((edit, index) => <article className="edit-card" key={`${edit.sourceRequirement}-${index}`}><div className="edit-card-top"><span>{edit.section}</span><span className={`edit-priority ${edit.priority}`}>{edit.priority} priority</span></div><strong>{edit.sourceRequirement}</strong><p>{edit.recommendation}</p>{edit.resumeEvidence.map((quote, i) => <blockquote key={i}>Resume: “{quote}”</blockquote>)}</article>)}</div> : <p className="empty-inline">No resume edits were identified from the current comparison.</p>}</section>
       <div className="note-box"><CircleHelp size={17} /><p><strong>Use your judgment</strong><br />The match score measures weighted coverage of listed requirements, not your chance of being hired. Verify every suggestion, and never claim a skill or experience you do not have. To create a tailored copy, first confirm which changes are accurate.</p></div>
     </>}
@@ -283,6 +315,18 @@ function JobAnalysisPage() {
 
 function JobList({ jobs, onDelete, deletingId }: { jobs: JobRecord[]; onDelete?: (id: string) => void; deletingId?: string }) {
   return <div className="job-list">{jobs.map((job) => <article className="job-row" key={job._id}><div className="job-company-mark">{job.companyName.slice(0, 1).toUpperCase()}</div><div className="job-row-copy"><NavLink to={`/jobs/${job._id}`}><strong>{job.jobTitle || job.companyName}</strong></NavLink><span>{job.jobTitle ? `${job.companyName} · ` : ''}Saved {formatDate(job.createdAt)}</span></div><NavLink to={`/jobs/${job._id}`} className="job-state">{job.analysis?.method === 'rules-v1' ? `${job.analysis.score}% match` : job.analysis ? 'Historical result' : 'Run comparison'}</NavLink>{onDelete && <button className="icon-button delete-job-button" onClick={() => onDelete(job._id)} disabled={deletingId === job._id} aria-label={`Delete ${job.companyName} job`} title="Delete saved job"><Trash2 size={15} /></button>}</article>)}</div>
+}
+
+function TailoredResumesPage() {
+  const [resumes, setResumes] = useState<Awaited<ReturnType<typeof api.getTailoredResumes>>['resumes']>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    void api.getTailoredResumes().then((result) => setResumes(result.resumes))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load tailored copies.'))
+      .finally(() => setLoading(false))
+  }, [])
+  return <><Header title="Tailored copies" subtitle="Saved job-specific versions, kept separate from your main resume." />{error && <ErrorNotice message={error} />}{loading ? <LoadingMessage label="Loading tailored copies…" /> : resumes.length === 0 ? <section className="panel"><div className="empty-state"><div className="empty-icon"><FileText size={20} /></div><strong>No tailored copies yet</strong><span>Compare a job, select accurate missing skills, and confirm to create one.</span><NavLink to="/compare" className="button button-secondary">Compare a job</NavLink></div></section> : <div className="tailored-resume-list">{resumes.map((resume) => <details className="panel tailored-saved-card" key={resume._id}><summary><span><strong>{resume.companyName}{resume.jobTitle ? ` · ${resume.jobTitle}` : ''}</strong><small>Saved {formatDate(resume.createdAt)} · {resume.selectedSkills?.length ?? 0} selected skill(s)</small></span><span className="text-link">View copy <ChevronDown size={14} /></span></summary><h3>Changes made</h3><ul className="change-location-list">{resume.changes?.map((change, index) => <li key={`${change.skill}-${index}`}><strong>{change.skill}</strong><span>Added to {change.section}. {change.location}</span></li>)}</ul><label className="field-label" htmlFor={`saved-tailored-${resume._id}`}>Resume text</label><textarea id={`saved-tailored-${resume._id}`} className="text-area resume-area" value={resume.content} readOnly /></details>)}</div>}</>
 }
 
 function InsightsPage() {
@@ -385,7 +429,7 @@ function SessionGate() {
   if (status === 'error') return <main className="app-state"><div className="app-state-card"><div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>resume<span className="brand-light">studio</span></span></div><h1>Workspace unavailable</h1><ErrorNotice message={error} onRetry={() => void checkSession()} /><p>Start the API with <code>npm run dev:server</code> and make sure <code>VITE_API_BASE_URL</code> points to it.</p></div></main>
   if (status === 'unauthenticated') return <LoginPage onAuthenticated={() => setStatus('authenticated')} />
 
-  return <div className="app-shell"><Sidebar onLogout={() => void logout()} busy={loggingOut} /><main className="main-area"><Routes><Route path="/" element={<Overview />} /><Route path="/resume" element={<ResumePage />} /><Route path="/compare" element={<ComparePage />} /><Route path="/insights" element={<InsightsPage />} /><Route path="/jobs/:jobId" element={<JobAnalysisPage />} /><Route path="*" element={<Overview />} /></Routes></main></div>
+  return <div className="app-shell"><Sidebar onLogout={() => void logout()} busy={loggingOut} /><main className="main-area"><Routes><Route path="/" element={<Overview />} /><Route path="/resume" element={<ResumePage />} /><Route path="/compare" element={<ComparePage />} /><Route path="/tailored" element={<TailoredResumesPage />} /><Route path="/insights" element={<InsightsPage />} /><Route path="/jobs/:jobId" element={<JobAnalysisPage />} /><Route path="*" element={<Overview />} /></Routes></main></div>
 }
 
 function App() {

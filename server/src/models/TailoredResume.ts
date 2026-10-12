@@ -6,6 +6,9 @@ export interface TailoredResumeDocument {
   jobTitle?: string
   content: string
   changeSummary: string[]
+  selectedSkills: string[]
+  changes: Array<{ skill: string; section: string; location: string; insertedText: string }>
+  sourceResumeHash: string
   createdAt: Date
   updatedAt: Date
 }
@@ -17,6 +20,9 @@ const tailoredResumeSchema = new Schema<TailoredResumeDocument>(
     jobTitle: { type: String, trim: true, maxlength: 160 },
     content: { type: String, required: true, maxlength: 50000 },
     changeSummary: { type: [String], default: [] },
+    selectedSkills: { type: [String], default: [] },
+    changes: { type: [{ skill: String, section: String, location: String, insertedText: String }], default: [] },
+    sourceResumeHash: { type: String, default: '' },
   },
   { timestamps: true, versionKey: false },
 )

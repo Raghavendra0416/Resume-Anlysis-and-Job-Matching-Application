@@ -41,6 +41,7 @@ export const api = {
   analyzeJob: (id: string, force = false) => apiRequest<{ job: JobRecord; cached: boolean }>(`/jobs/${id}/analyze`, { method: 'POST', body: JSON.stringify({ force }) }),
   deleteJob: (id: string) => apiRequest<void>(`/jobs/${id}`, { method: 'DELETE' }),
   getTailoredResumes: () => apiRequest<{ resumes: TailoredResumeRecord[] }>('/tailored-resumes'),
+  createTailoredResume: (jobId: string, selectedSkills: string[]) => apiRequest<{ resume: TailoredResumeRecord }>(`/tailored-resumes/jobs/${jobId}`, { method: 'POST', body: JSON.stringify({ selectedSkills, confirmed: true }) }),
 }
 
 export interface ResumeRecord {
@@ -76,6 +77,7 @@ export interface JobAnalysis {
     jobEvidence: string[]
     recommendation: string
   }>
+  resumeContentHash: string
   recommendedEdits: Array<{
     section: 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'other'
     priority: 'high' | 'medium' | 'low'
@@ -92,6 +94,10 @@ export interface TailoredResumeRecord {
   companyName: string
   jobTitle?: string
   content: string
+  changeSummary?: string[]
+  selectedSkills?: string[]
+  changes?: Array<{ skill: string; section: string; location: string; insertedText: string }>
+  sourceResumeHash?: string
   createdAt: string
 }
 
