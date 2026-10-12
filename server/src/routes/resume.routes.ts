@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { Resume } from '../models/Resume.js'
+import { Job } from '../models/Job.js'
 import { asyncHandler } from '../middleware/async-handler.js'
 
 export const resumeRouter = Router()
@@ -21,10 +22,12 @@ resumeRouter.put('/', asyncHandler(async (req, res) => {
     { $set: { content }, $setOnInsert: { key: 'primary' }, $unset: { analysis: 1 } },
     { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
   ).lean()
+  await Job.updateMany({}, { $set: { analysis: null } })
   res.json({ resume })
 }))
 
 resumeRouter.delete('/', asyncHandler(async (_req, res) => {
   await Resume.deleteOne({ key: 'primary' })
+  await Job.updateMany({}, { $set: { analysis: null } })
   res.status(204).end()
 }))

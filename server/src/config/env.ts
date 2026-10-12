@@ -1,5 +1,10 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
+
+const currentDirectory = dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: resolve(currentDirectory, '../../../.env') })
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -9,6 +14,8 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must contain at least 32 characters'),
   CLIENT_ORIGINS: z.string().default('http://localhost:5173'),
   COOKIE_NAME: z.string().default('resume_session'),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
 })
 
 const result = envSchema.safeParse(process.env)
@@ -21,4 +28,6 @@ export const env = {
   ...result.data,
   clientOrigins: result.data.CLIENT_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
   isProduction: result.data.NODE_ENV === 'production',
+  geminiApiKey: result.data.GEMINI_API_KEY,
+  geminiModel: result.data.GEMINI_MODEL,
 }

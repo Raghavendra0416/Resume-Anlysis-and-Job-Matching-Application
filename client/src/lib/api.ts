@@ -37,6 +37,8 @@ export const api = {
   deleteResume: () => apiRequest<void>('/resume', { method: 'DELETE' }),
   getJobs: (limit = 50) => apiRequest<{ jobs: JobRecord[]; total: number }>(`/jobs?limit=${limit}`),
   createJob: (job: NewJob) => apiRequest<{ job: JobRecord }>('/jobs', { method: 'POST', body: JSON.stringify(job) }),
+  getJob: (id: string) => apiRequest<{ job: JobRecord }>(`/jobs/${id}`),
+  analyzeJob: (id: string, force = false) => apiRequest<{ job: JobRecord; cached: boolean }>(`/jobs/${id}/analyze`, { method: 'POST', body: JSON.stringify({ force }) }),
   deleteJob: (id: string) => apiRequest<void>(`/jobs/${id}`, { method: 'DELETE' }),
   getTailoredResumes: () => apiRequest<{ resumes: TailoredResumeRecord[] }>('/tailored-resumes'),
 }
@@ -55,9 +57,34 @@ export interface JobRecord {
   companyDescription?: string
   additionalInfo?: string
   jobDescription: string
-  analysis: null | { score: number; summary: string }
+  analysis: JobAnalysis | null
   createdAt: string
   updatedAt: string
+}
+
+export interface JobAnalysis {
+  score: number
+  scoreMethod: string
+  summary: string
+  strengths: string[]
+  requirements: Array<{
+    name: string
+    category: 'skill' | 'experience' | 'education' | 'other'
+    importance: 'required' | 'preferred' | 'inferred'
+    status: 'evidenced' | 'partial' | 'missing' | 'confirm'
+    resumeEvidence: string[]
+    jobEvidence: string[]
+    recommendation: string
+  }>
+  recommendedEdits: Array<{
+    section: 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'other'
+    priority: 'high' | 'medium' | 'low'
+    recommendation: string
+    sourceRequirement: string
+    resumeEvidence: string[]
+  }>
+  analyzedAt: string
+  model: string
 }
 
 export interface TailoredResumeRecord {

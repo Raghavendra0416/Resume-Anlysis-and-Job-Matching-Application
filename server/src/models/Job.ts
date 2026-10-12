@@ -2,17 +2,28 @@ import { Schema, model } from 'mongoose'
 
 export interface JobAnalysis {
   score: number
+  scoreMethod: string
   summary: string
+  strengths: string[]
   requirements: Array<{
     name: string
+    category: 'skill' | 'experience' | 'education' | 'other'
     importance: 'required' | 'preferred' | 'inferred'
     status: 'evidenced' | 'partial' | 'missing' | 'confirm'
     resumeEvidence: string[]
+    jobEvidence: string[]
     recommendation: string
   }>
-  resumeEvidence: string[]
-  recommendations: string[]
+  recommendedEdits: Array<{
+    section: 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'other'
+    priority: 'high' | 'medium' | 'low'
+    recommendation: string
+    sourceRequirement: string
+    resumeEvidence: string[]
+  }>
   analyzedAt: string
+  resumeContentHash: string
+  model: string
 }
 
 export interface JobDocument {
@@ -29,9 +40,11 @@ export interface JobDocument {
 const requirementSchema = new Schema(
   {
     name: { type: String, required: true },
+    category: { type: String, enum: ['skill', 'experience', 'education', 'other'], required: true },
     importance: { type: String, enum: ['required', 'preferred', 'inferred'], required: true },
     status: { type: String, enum: ['evidenced', 'partial', 'missing', 'confirm'], required: true },
     resumeEvidence: { type: [String], default: [] },
+    jobEvidence: { type: [String], default: [] },
     recommendation: { type: String, required: true },
   },
   { _id: false },
@@ -40,11 +53,14 @@ const requirementSchema = new Schema(
 const analysisSchema = new Schema(
   {
     score: { type: Number, min: 0, max: 100, required: true },
+    scoreMethod: { type: String, required: true },
     summary: { type: String, required: true, maxlength: 3000 },
+    strengths: { type: [String], default: [] },
     requirements: { type: [requirementSchema], default: [] },
-    resumeEvidence: { type: [String], default: [] },
-    recommendations: { type: [String], default: [] },
+    recommendedEdits: { type: [{ section: String, priority: String, recommendation: String, sourceRequirement: String, resumeEvidence: [String] }], default: [] },
     analyzedAt: { type: String, required: true },
+    resumeContentHash: { type: String, required: true },
+    model: { type: String, required: true },
   },
   { _id: false },
 )

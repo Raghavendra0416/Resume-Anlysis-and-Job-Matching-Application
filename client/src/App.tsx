@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowDownRight,
   ArrowRight,
@@ -18,7 +18,7 @@ import {
   TrendingUp,
   Trash2,
 } from 'lucide-react'
-import { api, JobRecord, ResumeRecord } from './lib/api'
+import { api, JobAnalysis, JobRecord, ResumeRecord } from './lib/api'
 
 const navItems = [
   { label: 'Overview', to: '/', icon: LayoutDashboard },
@@ -168,12 +168,14 @@ function ResumePage() {
 }
 
 function ComparePage() {
+  const navigate = useNavigate()
   const [showCompanyDetails, setShowCompanyDetails] = useState(false)
   const [companyName, setCompanyName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [companyDescription, setCompanyDescription] = useState('')
   const [additionalInfo, setAdditionalInfo] = useState('')
   const [jobDescription, setJobDescription] = useState('')
+  const [privacyConfirmed, setPrivacyConfirmed] = useState(false)
   const [hasResume, setHasResume] = useState<boolean | null>(null)
   const [checkingResume, setCheckingResume] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -207,6 +209,12 @@ function ComparePage() {
         jobDescription,
       })
       setSavedJob(result.job)
+      try {
+        const analysis = await api.analyzeJob(result.job._id)
+        navigate(`/jobs/${analysis.job._id}`)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'The job was saved, but analysis could not be completed.')
+      }
       setCompanyName('')
       setJobTitle('')
       setCompanyDescription('')
@@ -219,11 +227,60 @@ function ComparePage() {
     }
   }
 
-  return <><Header title="Compare a job" subtitle="Understand how your experience aligns with a role before you tailor your resume." /><div className="step-indicator"><span className="step-number">01</span><span>JOB DETAILS & DESCRIPTION</span><span className="step-line"></span><span className="step-next">02&nbsp; REVIEW MATCH</span></div>{checkingResume ? <LoadingMessage label="Checking your main resume…" /> : !hasResume ? <div className="resume-required"><div className="intro-icon"><FileText size={20} /></div><div><strong>Add your main resume first</strong><p>Comparisons use your saved resume as their source of truth.</p><NavLink to="/resume" className="button button-primary">Go to My Resume <ArrowRight size={15} /></NavLink></div></div> : <form className="panel form-panel compare-panel" onSubmit={submit}><div className="panel-heading"><div><h2>Tell us about the role</h2><p>Company name and job description are required. The rest is optional.</p></div><span className="required-note">* Required</span></div><div className="field-grid"><div className="field"><label className="field-label" htmlFor="company">Company name <span>*</span></label><input id="company" className="text-input" maxLength={160} value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="e.g. Acme Inc." required /></div><div className="field"><label className="field-label" htmlFor="job-title">Job title <span className="optional">Optional</span></label><input id="job-title" className="text-input" maxLength={160} value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder="e.g. Frontend Developer" /></div></div><div className="field"><label className="field-label" htmlFor="job-description">Job description <span>*</span></label><textarea id="job-description" className="text-area jd-area" maxLength={30000} value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} placeholder="Paste the full job description here. Include responsibilities and qualifications for a more complete comparison." required /><span className="field-hint">{jobDescription.length.toLocaleString()} / 30,000 characters. Include required qualifications and responsibilities where available.</span></div><button type="button" className="optional-toggle" onClick={() => setShowCompanyDetails(!showCompanyDetails)} aria-expanded={showCompanyDetails}><Plus size={15} className={showCompanyDetails ? 'rotated' : ''} /> Add optional company details <ChevronDown size={15} className={showCompanyDetails ? 'rotated' : ''} /></button>{showCompanyDetails && <div className="optional-fields"><div className="field"><label className="field-label" htmlFor="company-description">Company description <span className="optional">Optional</span></label><textarea id="company-description" className="text-area company-area" maxLength={5000} value={companyDescription} onChange={(event) => setCompanyDescription(event.target.value)} placeholder="What does the company do? Add context that could help you understand the role." /></div><div className="field"><label className="field-label" htmlFor="additional-info">Other job information <span className="optional">Optional</span></label><textarea id="additional-info" className="text-area company-area" maxLength={5000} value={additionalInfo} onChange={(event) => setAdditionalInfo(event.target.value)} placeholder="Paste any other useful details, such as benefits, location, or application notes." /></div></div>}<div className="form-footer"><span className="privacy-hint"><span className="privacy-dot"></span>Your job details are saved to your private workspace.</span><button className="button button-primary" disabled={saving || !companyName.trim() || !jobDescription.trim()}><>{saving ? 'Saving…' : 'Save job'} <ArrowRight size={16} /></></button></div></form>}{error && <ErrorNotice message={error} onRetry={() => void checkResume()} />}{savedJob && <div className="success-notice saved-job-notice" role="status"><Check size={16} /><span><strong>{savedJob.companyName}</strong> was saved. AI comparison will be available in the next stage.</span><NavLink to="/insights" className="text-link">View saved jobs <ArrowRight size={14} /></NavLink></div>}<div className="analysis-disclaimer"><Sparkles size={16} /><span>When analysis is available, suggestions will be grounded in your resume. You’ll confirm any missing skill before it can be added.</span></div></>
+  return <><Header title="Compare a job" subtitle="Understand how your experience aligns with a role before you tailor your resume." /><div className="step-indicator"><span className="step-number">01</span><span>JOB DETAILS & DESCRIPTION</span><span className="step-line"></span><span className="step-next">02&nbsp; REVIEW MATCH</span></div>{checkingResume ? <LoadingMessage label="Checking your main resume…" /> : !hasResume ? <div className="resume-required"><div className="intro-icon"><FileText size={20} /></div><div><strong>Add your main resume first</strong><p>Comparisons use your saved resume as their source of truth.</p><NavLink to="/resume" className="button button-primary">Go to My Resume <ArrowRight size={15} /></NavLink></div></div> : <form className="panel form-panel compare-panel" onSubmit={submit}><div className="panel-heading"><div><h2>Tell us about the role</h2><p>Company name and job description are required. The rest is optional.</p></div><span className="required-note">* Required</span></div><div className="field-grid"><div className="field"><label className="field-label" htmlFor="company">Company name <span>*</span></label><input id="company" className="text-input" maxLength={160} value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="e.g. Acme Inc." required /></div><div className="field"><label className="field-label" htmlFor="job-title">Job title <span className="optional">Optional</span></label><input id="job-title" className="text-input" maxLength={160} value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder="e.g. Frontend Developer" /></div></div><div className="field"><label className="field-label" htmlFor="job-description">Job description <span>*</span></label><textarea id="job-description" className="text-area jd-area" maxLength={30000} value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} placeholder="Paste the full job description here. Include responsibilities and qualifications for a more complete comparison." required /><span className="field-hint">{jobDescription.length.toLocaleString()} / 30,000 characters. Include required qualifications and responsibilities where available.</span></div><button type="button" className="optional-toggle" onClick={() => setShowCompanyDetails(!showCompanyDetails)} aria-expanded={showCompanyDetails}><Plus size={15} className={showCompanyDetails ? 'rotated' : ''} /> Add optional company details <ChevronDown size={15} className={showCompanyDetails ? 'rotated' : ''} /></button>{showCompanyDetails && <div className="optional-fields"><div className="field"><label className="field-label" htmlFor="company-description">Company description <span className="optional">Optional</span></label><textarea id="company-description" className="text-area company-area" maxLength={5000} value={companyDescription} onChange={(event) => setCompanyDescription(event.target.value)} placeholder="What does the company do? Add context that could help you understand the role." /></div><div className="field"><label className="field-label" htmlFor="additional-info">Other job information <span className="optional">Optional</span></label><textarea id="additional-info" className="text-area company-area" maxLength={5000} value={additionalInfo} onChange={(event) => setAdditionalInfo(event.target.value)} placeholder="Paste any other useful details, such as benefits, location, or application notes." /></div></div>}<label className="privacy-confirm"><input type="checkbox" checked={privacyConfirmed} onChange={(event) => setPrivacyConfirmed(event.target.checked)} /><span>I removed personal, sensitive, and confidential information from my saved main resume before sending it to the free Gemini API. Google may use prompts to improve its products.</span></label><div className="form-footer"><span className="privacy-hint"><span className="privacy-dot"></span>Free Gemini may use prompts to improve Google products. Google’s terms say not to submit sensitive, confidential, or personal information.</span><button className="button button-primary" disabled={saving || !companyName.trim() || !jobDescription.trim() || !privacyConfirmed}><>{saving ? 'Saving & analyzing…' : 'Analyze this job'} <ArrowRight size={16} /></></button></div></form>}{error && <ErrorNotice message={error} />}{savedJob && <div className="success-notice saved-job-notice" role="status"><Check size={16} /><span><strong>{savedJob.companyName}</strong> was saved.</span><NavLink to={`/jobs/${savedJob._id}`} className="text-link">Open saved job <ArrowRight size={14} /></NavLink></div>}<div className="analysis-disclaimer"><Sparkles size={16} /><span>Suggestions are grounded in the resume text. Missing qualifications are not added unless you confirm they are true.</span></div></>
+}
+
+function JobAnalysisPage() {
+  const { jobId = '' } = useParams()
+  const [job, setJob] = useState<JobRecord | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const result = await api.getJob(jobId)
+      setJob(result.job)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load this comparison.')
+    } finally {
+      setLoading(false)
+    }
+  }, [jobId])
+  useEffect(() => { void load() }, [load])
+
+  async function analyze(force = false) {
+    setAnalyzing(true)
+    setError('')
+    try {
+      const result = await api.analyzeJob(jobId, force)
+      setJob(result.job)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not analyze this comparison.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const analysis: JobAnalysis | null = job?.analysis ?? null
+  const statusLabel = { evidenced: 'In resume', partial: 'Partly supported', missing: 'Missing', confirm: 'Needs your review' }
+  return <><Header title={job ? `${job.companyName} comparison` : 'Job comparison'} subtitle={job?.jobTitle || 'Resume and job description analysis'} />{loading ? <LoadingMessage label="Loading your comparison…" /> : error && !job ? <ErrorNotice message={error} onRetry={() => void load()} /> : job && <>
+    {error && <ErrorNotice message={error} />}
+    {!analysis ? <section className="panel analysis-empty"><div className="intro-icon"><Sparkles size={20} /></div><h2>Ready to compare your resume</h2><p>We’ll review the full resume against the job description, then show matched requirements, gaps, and resume edits to consider.</p><button className="button button-primary" onClick={() => void analyze()} disabled={analyzing}>{analyzing ? 'Analyzing resume and job…' : 'Analyze comparison'} <ArrowRight size={15} /></button></section> : <>
+      <section className="analysis-hero"><div><span className="analysis-kicker">WEIGHTED REQUIREMENT COVERAGE</span><div className="analysis-score">{analysis.score}<span>%</span></div><p>{analysis.summary}</p><small>{analysis.scoreMethod}</small></div><div className="analysis-hero-actions"><button className="button button-secondary" onClick={() => void analyze(true)} disabled={analyzing}>{analyzing ? 'Reanalyzing…' : 'Reanalyze'}</button><NavLink to="/resume" className="text-link">Update main resume <ArrowRight size={14} /></NavLink></div></section>
+      {analysis.strengths.length > 0 && <section className="panel analysis-section"><div className="panel-heading"><div><h2>Where you align</h2><p>Strengths supported by your resume.</p></div></div><ul className="strength-list">{analysis.strengths.map((strength, index) => <li key={`${strength}-${index}`}><Check size={15} />{strength}</li>)}</ul></section>}
+      <section className="panel analysis-section"><div className="panel-heading"><div><h2>Job requirements</h2><p>Review each requirement and the evidence the comparison found.</p></div></div><div className="requirement-list">{analysis.requirements.map((requirement, index) => <article className="requirement-card" key={`${requirement.name}-${index}`}><div className="requirement-heading"><div><strong>{requirement.name}</strong><span className="requirement-meta">{requirement.category} · {requirement.importance}</span></div><span className={`requirement-status ${requirement.status}`}>{statusLabel[requirement.status]}</span></div>{requirement.resumeEvidence.length > 0 && <div className="evidence"><b>Resume evidence</b>{requirement.resumeEvidence.map((quote, i) => <blockquote key={i}>“{quote}”</blockquote>)}</div>}{requirement.jobEvidence.length > 0 && <div className="evidence"><b>Job description</b>{requirement.jobEvidence.map((quote, i) => <blockquote key={i}>“{quote}”</blockquote>)}</div>}<p>{requirement.recommendation}</p></article>)}</div></section>
+      <section className="panel analysis-section"><div className="panel-heading"><div><h2>Resume changes to consider</h2><p>Suggestions may reflect skills that are absent today. Add a qualification only if you can honestly support it.</p></div></div>{analysis.recommendedEdits.length ? <div className="edit-list">{analysis.recommendedEdits.map((edit, index) => <article className="edit-card" key={`${edit.sourceRequirement}-${index}`}><div className="edit-card-top"><span>{edit.section}</span><span className={`edit-priority ${edit.priority}`}>{edit.priority} priority</span></div><strong>{edit.sourceRequirement}</strong><p>{edit.recommendation}</p>{edit.resumeEvidence.map((quote, i) => <blockquote key={i}>Resume: “{quote}”</blockquote>)}</article>)}</div> : <p className="empty-inline">No resume edits were identified from the current comparison.</p>}</section>
+      <div className="note-box"><CircleHelp size={17} /><p><strong>Use your judgment</strong><br />The match score measures weighted coverage of listed requirements, not your chance of being hired. Verify every suggestion, and never claim a skill or experience you do not have. To create a tailored copy, first confirm which changes are accurate.</p></div>
+    </>}
+    <div className="analysis-disclaimer"><Sparkles size={16} /><span>Analyzed with {analysis?.model ?? 'Google Gemini free tier'}. Free-tier prompts may be used by Google to improve products; Google’s terms say not to submit sensitive, confidential, or personal information.</span></div>
+  </>}</>
 }
 
 function JobList({ jobs, onDelete, deletingId }: { jobs: JobRecord[]; onDelete?: (id: string) => void; deletingId?: string }) {
-  return <div className="job-list">{jobs.map((job) => <article className="job-row" key={job._id}><div className="job-company-mark">{job.companyName.slice(0, 1).toUpperCase()}</div><div className="job-row-copy"><strong>{job.jobTitle || job.companyName}</strong><span>{job.jobTitle ? `${job.companyName} · ` : ''}Saved {formatDate(job.createdAt)}</span></div><span className="job-state">{job.analysis ? `${job.analysis.score}% match` : 'Saved · not analyzed'}</span>{onDelete && <button className="icon-button delete-job-button" onClick={() => onDelete(job._id)} disabled={deletingId === job._id} aria-label={`Delete ${job.companyName} job`} title="Delete saved job"><Trash2 size={15} /></button>}</article>)}</div>
+  return <div className="job-list">{jobs.map((job) => <article className="job-row" key={job._id}><div className="job-company-mark">{job.companyName.slice(0, 1).toUpperCase()}</div><div className="job-row-copy"><NavLink to={`/jobs/${job._id}`}><strong>{job.jobTitle || job.companyName}</strong></NavLink><span>{job.jobTitle ? `${job.companyName} · ` : ''}Saved {formatDate(job.createdAt)}</span></div><NavLink to={`/jobs/${job._id}`} className="job-state">{job.analysis ? `${job.analysis.score}% match` : 'Open comparison'}</NavLink>{onDelete && <button className="icon-button delete-job-button" onClick={() => onDelete(job._id)} disabled={deletingId === job._id} aria-label={`Delete ${job.companyName} job`} title="Delete saved job"><Trash2 size={15} /></button>}</article>)}</div>
 }
 
 function InsightsPage() {
@@ -262,7 +319,17 @@ function InsightsPage() {
   }
 
   const analyzedJobs = jobs.filter((job) => job.analysis)
-  return <><Header title="Job insights" subtitle="Spot patterns across the roles you’ve researched and the skills they ask for." /><div className="insight-callout"><div className="callout-icon"><TrendingUp size={18} /></div><div><strong>Your job search, in perspective</strong><p>As you save comparisons, we’ll surface recurring skills, common gaps, and trends by company or title.</p></div></div><section className="stat-grid insights-stats"><article className="stat-card"><div className="stat-top"><span className="stat-icon violet"><BriefcaseBusiness size={18} /></span><span className="stat-label">SAVED JOBS</span></div><div className="stat-value">{jobs.length}</div><p className="stat-foot">Roles in your comparison history</p></article><article className="stat-card"><div className="stat-top"><span className="stat-icon blue"><Sparkles size={18} /></span><span className="stat-label">MOST REQUESTED SKILL</span></div><div className="stat-value">—</div><p className="stat-foot">Available after AI analysis</p></article><article className="stat-card"><div className="stat-top"><span className="stat-icon amber"><ArrowDownRight size={18} /></span><span className="stat-label">COMMON SKILL GAP</span></div><div className="stat-value">—</div><p className="stat-foot">Available after AI analysis</p></article></section><div className="section-heading insight-heading"><div><h2>Saved job descriptions</h2><p>Delete a job and its associated tailored resume versions here.</p></div><NavLink to="/compare" className="button button-secondary"><Plus size={15} /> Add a job</NavLink></div>{error && <ErrorNotice message={error} onRetry={() => void load()} />}{loading ? <LoadingMessage label="Loading saved jobs…" /> : jobs.length ? <section className="panel saved-jobs-panel"><JobList jobs={jobs} onDelete={(id) => void removeJob(id)} deletingId={deletingId} />{analyzedJobs.length === 0 && <p className="future-analysis-note">Saved job records will appear here now. Skill frequency and gap insights will populate after the analysis stage.</p>}</section> : <section className="panel insight-empty"><div className="empty-state"><div className="empty-icon"><TrendingUp size={20} /></div><strong>No saved jobs yet</strong><span>Add a job description to start building your comparison history.</span><NavLink to="/compare" className="button button-secondary"><Plus size={16} /> Save a job</NavLink></div></section>}</>
+  const skillCounts = new Map<string, number>()
+  const gapCounts = new Map<string, number>()
+  for (const job of analyzedJobs) {
+    for (const requirement of job.analysis?.requirements ?? []) {
+      if (requirement.category === 'skill') skillCounts.set(requirement.name, (skillCounts.get(requirement.name) ?? 0) + 1)
+      if (requirement.category === 'skill' && (requirement.status === 'missing' || requirement.status === 'confirm')) gapCounts.set(requirement.name, (gapCounts.get(requirement.name) ?? 0) + 1)
+    }
+  }
+  const mostRequestedSkill = [...skillCounts.entries()].sort((a, b) => b[1] - a[1])[0]
+  const commonGap = [...gapCounts.entries()].sort((a, b) => b[1] - a[1])[0]
+  return <><Header title="Job insights" subtitle="Spot patterns across the roles you’ve researched and the skills they ask for." /><div className="insight-callout"><div className="callout-icon"><TrendingUp size={18} /></div><div><strong>Your job search, in perspective</strong><p>Skill frequency and gap counts update as you analyze roles.</p></div></div><section className="stat-grid insights-stats"><article className="stat-card"><div className="stat-top"><span className="stat-icon violet"><BriefcaseBusiness size={18} /></span><span className="stat-label">SAVED JOBS</span></div><div className="stat-value">{jobs.length}</div><p className="stat-foot">Roles in your comparison history</p></article><article className="stat-card"><div className="stat-top"><span className="stat-icon blue"><Sparkles size={18} /></span><span className="stat-label">MOST REQUESTED SKILL</span></div><div className="stat-value insight-value">{mostRequestedSkill?.[0] ?? '—'}</div><p className="stat-foot">{mostRequestedSkill ? `Requested by ${mostRequestedSkill[1]} ${mostRequestedSkill[1] === 1 ? 'job' : 'jobs'}` : 'Available after AI analysis'}</p></article><article className="stat-card"><div className="stat-top"><span className="stat-icon amber"><ArrowDownRight size={18} /></span><span className="stat-label">COMMON SKILL GAP</span></div><div className="stat-value insight-value">{commonGap?.[0] ?? '—'}</div><p className="stat-foot">{commonGap ? `Flagged by ${commonGap[1]} ${commonGap[1] === 1 ? 'job' : 'jobs'}` : 'Available after AI analysis'}</p></article></section><div className="section-heading insight-heading"><div><h2>Saved job descriptions</h2><p>Delete a job and its associated tailored resume versions here.</p></div><NavLink to="/compare" className="button button-secondary"><Plus size={15} /> Add a job</NavLink></div>{error && <ErrorNotice message={error} onRetry={() => void load()} />}{loading ? <LoadingMessage label="Loading saved jobs…" /> : jobs.length ? <section className="panel saved-jobs-panel"><JobList jobs={jobs} onDelete={(id) => void removeJob(id)} deletingId={deletingId} />{analyzedJobs.length === 0 && <p className="future-analysis-note">Skill frequency and gap insights appear after your first completed analysis.</p>}</section> : <section className="panel insight-empty"><div className="empty-state"><div className="empty-icon"><TrendingUp size={20} /></div><strong>No saved jobs yet</strong><span>Add a job description to start building your comparison history.</span><NavLink to="/compare" className="button button-secondary"><Plus size={16} /> Save a job</NavLink></div></section>}</>
 }
 
 function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
@@ -316,7 +383,7 @@ function SessionGate() {
   if (status === 'error') return <main className="app-state"><div className="app-state-card"><div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>resume<span className="brand-light">studio</span></span></div><h1>Workspace unavailable</h1><ErrorNotice message={error} onRetry={() => void checkSession()} /><p>Start the API with <code>npm run dev:server</code> and make sure <code>VITE_API_BASE_URL</code> points to it.</p></div></main>
   if (status === 'unauthenticated') return <LoginPage onAuthenticated={() => setStatus('authenticated')} />
 
-  return <div className="app-shell"><Sidebar onLogout={() => void logout()} busy={loggingOut} /><main className="main-area"><Routes><Route path="/" element={<Overview />} /><Route path="/resume" element={<ResumePage />} /><Route path="/compare" element={<ComparePage />} /><Route path="/insights" element={<InsightsPage />} /><Route path="*" element={<Overview />} /></Routes></main></div>
+  return <div className="app-shell"><Sidebar onLogout={() => void logout()} busy={loggingOut} /><main className="main-area"><Routes><Route path="/" element={<Overview />} /><Route path="/resume" element={<ResumePage />} /><Route path="/compare" element={<ComparePage />} /><Route path="/insights" element={<InsightsPage />} /><Route path="/jobs/:jobId" element={<JobAnalysisPage />} /><Route path="*" element={<Overview />} /></Routes></main></div>
 }
 
 function App() {
