@@ -16,7 +16,7 @@ export const app = express()
 app.disable('x-powered-by')
 app.use(helmet())
 app.use(cors({ origin: env.clientOrigins, credentials: true }))
-app.use(express.json({ limit: '64kb' }))
+app.use(express.json({ limit: '256kb' }))
 app.use(cookieParser())
 app.use('/api', requireTrustedOrigin)
 
